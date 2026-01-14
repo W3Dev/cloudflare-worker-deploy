@@ -1,0 +1,232 @@
+name: 'Vercel Preview Deploy'
+description: 'Deploy preview environments to Vercel with PR comments'
+author: 'W3Dev'
+
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+
+inputs:
+  vercel_token:
+    description: 'Vercel API token'
+    required: true
+  vercel_org_id:
+    description: 'Vercel Organization/Team ID'
+    required: true
+  vercel_project_id:
+    description: 'Vercel Project ID'
+    required: true
+  vercel_project_name:
+    description: 'Vercel Project name (for linking)'
+    required: false
+    default: ''
+  package_manager:
+    description: 'Package manager to use (bun, npm, pnpm)'
+    required: false
+    default: 'bun'
+  node_version:
+    description: 'Node.js version'
+    required: false
+    default: '22'
+  working_directory:
+    description: 'Working directory for the build'
+    required: false
+    default: '.'
+  alias_prefix:
+    description: 'Prefix for preview alias (e.g., "myapp" creates pr-123--myapp.vercel.app)'
+    required: false
+    default: ''
+  prebuild_script:
+    description: 'Optional script to run before build (e.g., configure git author)'
+    required: false
+    default: ''
+  install_command:
+    description: 'Custom install command (overrides package_manager default)'
+    required: false
+    default: ''
+  github_token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  deployment_url:
+    description: 'The Vercel deployment URL'
+    value: ${{ steps.deploy.outputs.url }}
+  alias_url:
+    description: 'The aliased preview URL'
+    value: ${{ steps.deploy.outputs.alias_url }}
+  pr_number:
+    description: 'The PR number (if applicable)'
+    value: ${{ steps.context.outputs.pr_number }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Determine context
+      id: context
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ -n "${{ github.event.inputs.pr_number }}" ]; then
+            echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+            echo "preview_alias=pr-${{ github.event.inputs.pr_number }}--${{ inputs.alias_prefix }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "preview_alias=" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.alias_prefix }}" ]; then
+            echo "preview_alias=pr-${{ github.event.pull_request.number }}--${{ inputs.alias_prefix }}" >> $GITHUB_OUTPUT
+          else
+            echo "preview_alias=" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Setup Bun
+      if: inputs.package_manager == 'bun'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Setup pnpm
+      if: inputs.package_manager == 'pnpm'
+      uses: pnpm/action-setup@v4
+      with:
+        version: latest
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        if [ -n "${{ inputs.install_command }}" ]; then
+          ${{ inputs.install_command }}
+        elif [ "${{ inputs.package_manager }}" == "bun" ]; then
+          bun install
+        elif [ "${{ inputs.package_manager }}" == "pnpm" ]; then
+          pnpm install
+        else
+          npm ci
+        fi
+
+    - name: Install Vercel CLI
+      shell: bash
+      run: |
+        if [ "${{ inputs.package_manager }}" == "bun" ]; then
+          bun install -g vercel
+        elif [ "${{ inputs.package_manager }}" == "pnpm" ]; then
+          pnpm install -g vercel
+        else
+          npm install -g vercel
+        fi
+
+    - name: Run prebuild script
+      if: inputs.prebuild_script != ''
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: ${{ inputs.prebuild_script }}
+
+    - name: Setup Vercel project linking
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        rm -rf .vercel
+        mkdir -p .vercel
+        PROJECT_NAME="${{ inputs.vercel_project_name }}"
+        if [ -z "$PROJECT_NAME" ]; then
+          PROJECT_NAME="${{ github.event.repository.name }}"
+        fi
+        echo "{\"orgId\":\"${{ inputs.vercel_org_id }}\",\"projectId\":\"${{ inputs.vercel_project_id }}\",\"projectName\":\"$PROJECT_NAME\"}" > .vercel/project.json
+
+    - name: Pull Vercel environment
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: vercel pull --yes --environment=preview --token=${{ inputs.vercel_token }}
+
+    - name: Build with Vercel
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: vercel build --token=${{ inputs.vercel_token }}
+
+    - name: Deploy to Vercel
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=${{ inputs.vercel_token }})
+        echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+        
+        if [ -n "${{ steps.context.outputs.preview_alias }}" ]; then
+          vercel alias set $DEPLOYMENT_URL ${{ steps.context.outputs.preview_alias }} --token=${{ inputs.vercel_token }} --scope=${{ inputs.vercel_org_id }} || true
+          echo "alias_url=https://${{ steps.context.outputs.preview_alias }}.vercel.app" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Add deployment summary
+      shell: bash
+      run: |
+        echo "## ✅ Vercel Preview Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| | |" >> $GITHUB_STEP_SUMMARY
+        echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Deployment URL** | ${{ steps.deploy.outputs.url }} |" >> $GITHUB_STEP_SUMMARY
+        if [ -n "${{ steps.deploy.outputs.alias_url }}" ]; then
+          echo "| **Alias URL** | ${{ steps.deploy.outputs.alias_url }} |" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+
+    - name: Comment on PR
+      if: steps.context.outputs.pr_number != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const prNumber = ${{ steps.context.outputs.pr_number }};
+          const deploymentUrl = "${{ steps.deploy.outputs.url }}";
+          const aliasUrl = "${{ steps.deploy.outputs.alias_url }}";
+          const projectName = "${{ inputs.vercel_project_name }}" || "${{ github.event.repository.name }}";
+          const marker = `<!-- vercel-preview-${projectName} -->`;
+          
+          const commentBody = `${marker}
+
+          🚀 **Preview Deployed!**
+
+          | | |
+          |---|---|
+          | **Preview URL** | ${deploymentUrl} |
+          ${aliasUrl ? `| **Alias URL** | ${aliasUrl} |` : ''}
+          | **Commit** | \`${{ github.sha }}\` |
+          `;
+          
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+            per_page: 100
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.user.login === 'github-actions[bot]' && 
+            comment.body.includes(marker)
+          );
+          
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: commentBody
+            });
+          } else {
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+          }
