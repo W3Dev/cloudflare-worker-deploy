@@ -150,11 +150,14 @@ runs:
         mkdir -p .vercel
         FINAL_NAME="${PROJECT_NAME:-$REPO_NAME}"
         echo "{\"orgId\":\"$VERCEL_ORG_ID\",\"projectId\":\"$VERCEL_PROJECT_ID\",\"projectName\":\"$FINAL_NAME\"}" > .vercel/project.json
+        cat .vercel/project.json
 
     - name: Pull Vercel environment
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
+        VERCEL_ORG_ID: ${{ inputs.vercel_org_id }}
+        VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
         VERCEL_TOKEN: ${{ inputs.vercel_token }}
       run: vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
 
@@ -162,6 +165,8 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
+        VERCEL_ORG_ID: ${{ inputs.vercel_org_id }}
+        VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
         VERCEL_TOKEN: ${{ inputs.vercel_token }}
       run: vercel build --token=$VERCEL_TOKEN
 
@@ -170,8 +175,9 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
-        VERCEL_TOKEN: ${{ inputs.vercel_token }}
         VERCEL_ORG_ID: ${{ inputs.vercel_org_id }}
+        VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
+        VERCEL_TOKEN: ${{ inputs.vercel_token }}
         PREVIEW_ALIAS: ${{ steps.context.outputs.preview_alias }}
       run: |
         DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN)
