@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - uses: W3Dev/vercel-preview-action@v1
+      - uses: W3Dev/vercel-deploy@main
         with:
           vercel_token: ${{ secrets.VERCEL_TOKEN }}
           vercel_org_id: 'team_xxxxx'
@@ -42,7 +42,7 @@ jobs:
 ### Monorepo Usage
 
 ```yaml
-- uses: W3Dev/vercel-preview-action@v1
+- uses: W3Dev/vercel-deploy@main
   with:
     vercel_token: ${{ secrets.VERCEL_TOKEN }}
     vercel_org_id: 'team_xxxxx'
@@ -54,7 +54,7 @@ jobs:
 ### With Prebuild Script
 
 ```yaml
-- uses: W3Dev/vercel-preview-action@v1
+- uses: W3Dev/vercel-deploy@main
   with:
     vercel_token: ${{ secrets.VERCEL_TOKEN }}
     vercel_org_id: 'team_xxxxx'
@@ -67,7 +67,7 @@ jobs:
 ### Using pnpm
 
 ```yaml
-- uses: W3Dev/vercel-preview-action@v1
+- uses: W3Dev/vercel-deploy@main
   with:
     vercel_token: ${{ secrets.VERCEL_TOKEN }}
     vercel_org_id: 'team_xxxxx'
@@ -127,7 +127,7 @@ jobs:
         with:
           fetch-depth: 0
       
-      - uses: W3Dev/vercel-preview-action@v1
+      - uses: W3Dev/vercel-deploy@main
         id: deploy
         with:
           vercel_token: ${{ secrets.VERCEL_TOKEN }}
