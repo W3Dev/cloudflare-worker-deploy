@@ -1,5 +1,5 @@
-name: 'Vercel Preview Deploy'
-description: 'Deploy preview environments to Vercel with PR comments'
+name: 'Vercel Deploy'
+description: 'Deploy preview and production environments to Vercel'
 author: 'W3Dev'
 
 branding:
@@ -48,6 +48,14 @@ inputs:
     description: 'GitHub token for PR comments'
     required: false
     default: ${{ github.token }}
+  environment:
+    description: 'Deployment environment (preview or production)'
+    required: false
+    default: 'preview'
+  predeploy_script:
+    description: 'Optional script to run before deployment'
+    required: false
+    default: ''
 
 outputs:
   deployment_url:
@@ -66,8 +74,16 @@ runs:
     - name: Determine context
       id: context
       shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+        echo "is_production=${{ inputs.environment == 'production' }}" >> $GITHUB_OUTPUT
+
+        # Skip alias generation for production deployments
+        if [ "$ENVIRONMENT" == "production" ]; then
+          echo "pr_number=" >> $GITHUB_OUTPUT
+          echo "preview_alias=" >> $GITHUB_OUTPUT
+        elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
           if [ -n "${{ github.event.inputs.pr_number }}" ]; then
             echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
             echo "preview_alias=pr-${{ github.event.inputs.pr_number }}--${{ inputs.alias_prefix }}" >> $GITHUB_OUTPUT
@@ -159,7 +175,7 @@ runs:
         VERCEL_ORG_ID: ${{ inputs.vercel_org_id }}
         VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
         VERCEL_TOKEN: ${{ inputs.vercel_token }}
-      run: vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+      run: vercel pull --yes --environment=${{ inputs.environment }} --token=$VERCEL_TOKEN
 
     - name: Build with Vercel
       shell: bash
@@ -170,6 +186,12 @@ runs:
         VERCEL_TOKEN: ${{ inputs.vercel_token }}
       run: vercel build --token=$VERCEL_TOKEN
 
+    - name: Run predeploy script
+      if: inputs.predeploy_script != ''
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: ${{ inputs.predeploy_script }}
+
     - name: Deploy to Vercel
       id: deploy
       shell: bash
@@ -179,10 +201,15 @@ runs:
         VERCEL_PROJECT_ID: ${{ inputs.vercel_project_id }}
         VERCEL_TOKEN: ${{ inputs.vercel_token }}
         PREVIEW_ALIAS: ${{ steps.context.outputs.preview_alias }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN)
+        if [ "$ENVIRONMENT" == "production" ]; then
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+        else
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt --token=$VERCEL_TOKEN)
+        fi
         echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
-        
+
         if [ -n "$PREVIEW_ALIAS" ]; then
           vercel alias set "$DEPLOYMENT_URL" "$PREVIEW_ALIAS" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID || true
           echo "alias_url=https://${PREVIEW_ALIAS}.vercel.app" >> $GITHUB_OUTPUT
@@ -194,8 +221,13 @@ runs:
         DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         ALIAS_URL: ${{ steps.deploy.outputs.alias_url }}
         COMMIT_SHA: ${{ github.sha }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        echo "## ✅ Vercel Preview Deployed" >> $GITHUB_STEP_SUMMARY
+        if [ "$ENVIRONMENT" == "production" ]; then
+          echo "## ✅ Vercel Production Deployed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ✅ Vercel Preview Deployed" >> $GITHUB_STEP_SUMMARY
+        fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| | |" >> $GITHUB_STEP_SUMMARY
         echo "|---|---|" >> $GITHUB_STEP_SUMMARY
@@ -206,7 +238,7 @@ runs:
         echo "| **Commit** | \`$COMMIT_SHA\` |" >> $GITHUB_STEP_SUMMARY
 
     - name: Comment on PR
-      if: steps.context.outputs.pr_number != ''
+      if: steps.context.outputs.pr_number != '' && inputs.environment != 'production'
       uses: actions/github-script@v7
       env:
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}

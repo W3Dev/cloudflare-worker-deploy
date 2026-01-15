@@ -1,6 +1,6 @@
-# Vercel Preview Deploy Action
+# Vercel Deploy Action
 
-A reusable GitHub Action for deploying preview environments to Vercel with automatic PR comments and full build control.
+A reusable GitHub Action for deploying preview and production environments to Vercel with automatic PR comments and full build control.
 
 ## Why Use This Instead of Vercel's Native Integration?
 
@@ -45,10 +45,11 @@ Use Vercel's native integration if you:
 ## Features
 
 - 🏗️ Build in GitHub Actions, deploy to Vercel
+- 🚀 Support for both preview and production deployments
 - 🔗 Stable preview aliases (`pr-123--myapp.vercel.app`)
 - 💬 Smart PR comments that update instead of spam
 - 📦 Support for Bun, npm, and pnpm
-- ⚙️ Prebuild scripts and custom install commands
+- ⚙️ Prebuild and predeploy scripts for custom workflows
 - 📂 Monorepo support with `working_directory`
 - 📊 GitHub Actions summary
 
@@ -116,6 +117,44 @@ jobs:
     package_manager: 'pnpm'
 ```
 
+### Production Deployment (on merge to main)
+
+```yaml
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: W3Dev/vercel-deploy@main
+        with:
+          vercel_token: ${{ secrets.VERCEL_TOKEN }}
+          vercel_org_id: 'team_xxxxx'
+          vercel_project_id: 'prj_xxxxx'
+          environment: production
+```
+
+### Production with Pre-deploy Script
+
+```yaml
+- uses: W3Dev/vercel-deploy@main
+  with:
+    vercel_token: ${{ secrets.VERCEL_TOKEN }}
+    vercel_org_id: 'team_xxxxx'
+    vercel_project_id: 'prj_xxxxx'
+    environment: production
+    predeploy_script: |
+      echo "Running pre-deployment checks..."
+      npm run lint
+      npm run test
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -129,7 +168,9 @@ jobs:
 | `working_directory` | Build directory | ❌ | `.` |
 | `alias_prefix` | Prefix for preview alias | ❌ | - |
 | `prebuild_script` | Script to run before build | ❌ | - |
+| `predeploy_script` | Script to run before deployment | ❌ | - |
 | `install_command` | Custom install command | ❌ | - |
+| `environment` | Deployment environment (`preview` or `production`) | ❌ | `preview` |
 | `github_token` | Token for PR comments | ❌ | `github.token` |
 
 ## Outputs
