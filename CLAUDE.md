@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **GitHub Composite Action** that deploys preview environments to Vercel with automatic PR comments. It's a pure Bash/YAML action with no build system—the action is directly executable through GitHub Actions.
+This is a **GitHub Composite Action** that deploys preview and production environments to Cloudflare Workers with automatic PR comments and stable preview URLs. It's a pure Bash/YAML action with no build system—the action is directly executable through GitHub Actions.
 
 ## Repository Structure
 
-- `action.yml` - The entire action logic (264 lines of YAML + Bash)
+- `action.yml` - The entire action logic (YAML + Bash)
 - `README.md` - User documentation with usage examples
 
 ## Development Notes
@@ -24,29 +24,51 @@ To test changes, you must:
 
 The action executes a sequential pipeline:
 
-1. **Context Detection** - Determines PR number from `pull_request` event or manual `workflow_dispatch`
+1. **Context Detection** - Determines PR number from `pull_request` event or manual `workflow_dispatch`; generates preview alias (e.g., `pr-123` or `{prefix}-pr-123`)
 2. **Environment Setup** - Installs Node.js and package manager (Bun/npm/pnpm)
 3. **Dependencies** - Runs install command with the selected package manager
-4. **Vercel CLI** - Installs globally via npm
-5. **Prebuild** - Executes optional custom script (useful for codegen, git config, etc.)
-6. **Vercel Config** - Creates `.vercel/project.json` with org/project IDs
-7. **Environment Pull** - Fetches preview env vars from Vercel
-8. **Build** - Runs `vercel build` to create prebuilt artifact
-9. **Deploy** - Runs `vercel deploy --prebuilt`
-10. **Alias** - Creates stable PR-specific URL (e.g., `pr-123--myapp.vercel.app`)
-11. **PR Comment** - Updates or creates idempotent comment with deployment links
+4. **Wrangler CLI** - Installs globally via npm/bun/pnpm
+5. **Prebuild** - Executes optional custom script (useful for codegen, build, etc.)
+6. **Predeploy** - Executes optional custom script before deployment
+7. **Deploy** - Uses different strategies based on environment:
+   - **Production**: `wrangler deploy` (immediate deployment)
+   - **Preview**: `wrangler versions upload --preview-alias` (creates version with aliased URL)
+8. **Teardown** - Optional cleanup step for PR close events (Cloudflare auto-manages aliases)
+9. **Summary** - Adds deployment info to GitHub Actions summary
+10. **PR Comment** - Updates or creates idempotent comment with deployment links
 
 ## Key Implementation Details
 
-- **Idempotent PR comments**: Uses HTML marker `<!-- vercel-preview-{projectName} -->` to update same comment on subsequent pushes
+- **Deployment Strategy**:
+  - Production uses `wrangler deploy` for immediate deployment
+  - Preview uses `wrangler versions upload --preview-alias` to create isolated versions with stable URLs
+  - Secrets and bindings are preserved in previews (same worker, different version)
+
+- **Idempotent PR comments**: Uses HTML marker `<!-- cloudflare-workers-preview-{working_directory} -->` to update same comment on subsequent pushes
+
 - **Package manager detection**: Supports Bun (default), npm, and pnpm with automatic fallback
+
 - **Monorepo support**: `working_directory` input for subdirectory deployments
+
 - **External actions used**: `actions/setup-node@v4`, `oven-sh/setup-bun@v2`, `pnpm/action-setup@v4`, `actions/github-script@v7`
+
+## URL Patterns
+
+- **Production**: `https://{worker-name}.{subdomain}.workers.dev`
+- **Preview**: `https://{alias}-{worker-name}.{subdomain}.workers.dev`
+  - Default alias: `pr-{number}`
+  - With prefix: `{prefix}-pr-{number}`
 
 ## Action Inputs/Outputs
 
-**Required inputs**: `vercel_token`, `vercel_org_id`, `vercel_project_id`
+**Required inputs**: `cloudflare_api_token`, `cloudflare_account_id`
 
-**Key optional inputs**: `package_manager`, `node_version`, `working_directory`, `alias_prefix`, `prebuild_script`, `install_command`
+**Key optional inputs**: `package_manager`, `node_version`, `working_directory`, `alias_prefix`, `prebuild_script`, `predeploy_script`, `install_command`, `environment`, `teardown`
 
-**Outputs**: `deployment_url`, `alias_url`, `pr_number`
+**Outputs**: `deployment_url`, `preview_url`, `version_id`, `pr_number`
+
+## Limitations
+
+- Preview URLs don't work with Durable Objects
+- Preview URLs only work on `workers.dev` subdomain
+
