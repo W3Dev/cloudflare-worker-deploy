@@ -153,6 +153,10 @@ on:
         description: 'PR number to deploy'
         required: false
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -186,6 +190,7 @@ When triggered manually with a PR number, the action will:
 | `install_command` | Custom install command | No | - |
 | `environment` | Deployment environment (`preview` or `production`) | No | `preview` |
 | `github_token` | Token for PR comments | No | `github.token` |
+| `wrangler_version` | Wrangler CLI version (e.g., `4.42.0`) | No | `latest` |
 
 ## Outputs
 

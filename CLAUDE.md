@@ -63,7 +63,7 @@ The action executes a sequential pipeline:
 
 **Required inputs**: `cloudflare_api_token`, `cloudflare_account_id`
 
-**Key optional inputs**: `package_manager`, `node_version`, `working_directory`, `alias_prefix`, `prebuild_script`, `predeploy_script`, `install_command`, `environment`, `teardown`
+**Key optional inputs**: `package_manager`, `node_version`, `working_directory`, `alias_prefix`, `prebuild_script`, `predeploy_script`, `install_command`, `environment`, `teardown`, `wrangler_version`
 
 **Outputs**: `deployment_url`, `preview_url`, `version_id`, `pr_number`
 

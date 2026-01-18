@@ -53,6 +53,10 @@ inputs:
     description: 'Optional script to run before deployment'
     required: false
     default: ''
+  wrangler_version:
+    description: 'Wrangler CLI version (e.g., 4.42.0 or latest)'
+    required: false
+    default: 'latest'
 
 outputs:
   deployment_url:
@@ -145,13 +149,20 @@ runs:
       shell: bash
       env:
         PKG_MANAGER: ${{ inputs.package_manager }}
+        WRANGLER_VERSION: ${{ inputs.wrangler_version }}
       run: |
-        if [ "$PKG_MANAGER" == "bun" ]; then
-          bun install -g wrangler
-        elif [ "$PKG_MANAGER" == "pnpm" ]; then
-          pnpm install -g wrangler
+        if [ "$WRANGLER_VERSION" == "latest" ]; then
+          PACKAGE="wrangler"
         else
-          npm install -g wrangler
+          PACKAGE="wrangler@$WRANGLER_VERSION"
+        fi
+
+        if [ "$PKG_MANAGER" == "bun" ]; then
+          bun install -g "$PACKAGE"
+        elif [ "$PKG_MANAGER" == "pnpm" ]; then
+          pnpm install -g "$PACKAGE"
+        else
+          npm install -g "$PACKAGE"
         fi
 
     - name: Run prebuild script
@@ -179,8 +190,17 @@ runs:
       run: |
         if [ "$ENVIRONMENT" == "production" ]; then
           # Production: upload and deploy immediately
-          OUTPUT=$(wrangler deploy 2>&1) || { echo "$OUTPUT"; exit 1; }
+          set +e
+          OUTPUT=$(wrangler deploy 2>&1)
+          EXIT_CODE=$?
+          set -e
           echo "$OUTPUT"
+
+          # Check if deployment succeeded (wrangler may return non-zero for warnings)
+          if ! echo "$OUTPUT" | grep -qE "(Uploaded|Published)"; then
+            echo "Deployment failed with exit code $EXIT_CODE"
+            exit 1
+          fi
 
           # Parse production URL from output
           DEPLOYMENT_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
@@ -188,8 +208,17 @@ runs:
         else
           # Preview: upload version with alias (preserves secrets/bindings)
           if [ -n "$PREVIEW_ALIAS" ]; then
-            OUTPUT=$(wrangler versions upload --preview-alias "$PREVIEW_ALIAS" 2>&1) || { echo "$OUTPUT"; exit 1; }
+            set +e
+            OUTPUT=$(wrangler versions upload --preview-alias "$PREVIEW_ALIAS" 2>&1)
+            EXIT_CODE=$?
+            set -e
             echo "$OUTPUT"
+
+            # Check if upload succeeded (wrangler may return non-zero for warnings)
+            if ! echo "$OUTPUT" | grep -q "Uploaded"; then
+              echo "Deployment failed with exit code $EXIT_CODE"
+              exit 1
+            fi
 
             # Parse version ID from output
             VERSION_ID=$(echo "$OUTPUT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1 || echo "")
@@ -202,8 +231,17 @@ runs:
             echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
           else
             # No alias provided, fall back to regular deploy
-            OUTPUT=$(wrangler deploy 2>&1) || { echo "$OUTPUT"; exit 1; }
+            set +e
+            OUTPUT=$(wrangler deploy 2>&1)
+            EXIT_CODE=$?
+            set -e
             echo "$OUTPUT"
+
+            # Check if deployment succeeded (wrangler may return non-zero for warnings)
+            if ! echo "$OUTPUT" | grep -qE "(Uploaded|Published)"; then
+              echo "Deployment failed with exit code $EXIT_CODE"
+              exit 1
+            fi
 
             DEPLOYMENT_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
             echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
