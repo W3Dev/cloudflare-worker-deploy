@@ -198,6 +198,7 @@ When triggered manually with a PR number, the action will:
 |--------|-------------|
 | `deployment_url` | The Cloudflare Workers deployment URL |
 | `preview_url` | The aliased preview URL (for preview deployments) |
+| `version_url` | The version-specific preview URL (for preview deployments) |
 | `version_id` | The uploaded version ID |
 | `pr_number` | The PR number (if applicable) |
 

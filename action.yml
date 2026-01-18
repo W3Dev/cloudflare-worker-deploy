@@ -65,6 +65,9 @@ outputs:
   preview_url:
     description: 'The aliased preview URL (for preview deployments)'
     value: ${{ steps.deploy.outputs.preview_url }}
+  version_url:
+    description: 'The version-specific preview URL (for preview deployments)'
+    value: ${{ steps.deploy.outputs.version_url }}
   version_id:
     description: 'The uploaded version ID'
     value: ${{ steps.deploy.outputs.version_id }}
@@ -223,11 +226,28 @@ runs:
             # Parse version ID from output
             VERSION_ID=$(echo "$OUTPUT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1 || echo "")
 
-            # Parse preview URL from output
-            PREVIEW_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
+            # Parse URLs from output
+            # Get the version-based URL (e.g., https://a05306a7-worker.subdomain.workers.dev)
+            VERSION_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || echo "")
+
+            # Try to find aliased URL in output, or construct it from version URL
+            ALIASED_URL=$(echo "$OUTPUT" | grep -oE "https://${PREVIEW_ALIAS}[^[:space:]]*\.workers\.dev" | head -1 || echo "")
+            if [ -z "$ALIASED_URL" ] && [ -n "$VERSION_URL" ]; then
+              # Construct aliased URL from version URL
+              # Pattern: https://{version-id}-{worker-name}.{subdomain}.workers.dev
+              # We want: https://{alias}-{worker-name}.{subdomain}.workers.dev
+              WORKER_AND_SUBDOMAIN=$(echo "$VERSION_URL" | sed -E 's|https://[^-]+-||')
+              if [ -n "$WORKER_AND_SUBDOMAIN" ]; then
+                ALIASED_URL="https://${PREVIEW_ALIAS}-${WORKER_AND_SUBDOMAIN}"
+              fi
+            fi
+
+            # Use aliased URL as primary, version URL as secondary
+            PREVIEW_URL="${ALIASED_URL:-$VERSION_URL}"
 
             echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
             echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+            echo "version_url=$VERSION_URL" >> $GITHUB_OUTPUT
             echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
           else
             # No alias provided, fall back to regular deploy
@@ -270,6 +290,7 @@ runs:
       env:
         DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        VERSION_URL: ${{ steps.deploy.outputs.version_url }}
         VERSION_ID: ${{ steps.deploy.outputs.version_id }}
         COMMIT_SHA: ${{ github.sha }}
         ENVIRONMENT: ${{ inputs.environment }}
@@ -282,9 +303,9 @@ runs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| | |" >> $GITHUB_STEP_SUMMARY
         echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Deployment URL** | $DEPLOYMENT_URL |" >> $GITHUB_STEP_SUMMARY
-        if [ -n "$PREVIEW_URL" ] && [ "$PREVIEW_URL" != "$DEPLOYMENT_URL" ]; then
-          echo "| **Preview URL** | $PREVIEW_URL |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Preview URL** | $DEPLOYMENT_URL |" >> $GITHUB_STEP_SUMMARY
+        if [ -n "$VERSION_URL" ] && [ "$VERSION_URL" != "$DEPLOYMENT_URL" ]; then
+          echo "| **Version URL** | $VERSION_URL |" >> $GITHUB_STEP_SUMMARY
         fi
         if [ -n "$VERSION_ID" ]; then
           echo "| **Version ID** | \`$VERSION_ID\` |" >> $GITHUB_STEP_SUMMARY
@@ -298,6 +319,7 @@ runs:
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
         DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        VERSION_URL: ${{ steps.deploy.outputs.version_url }}
         VERSION_ID: ${{ steps.deploy.outputs.version_id }}
         COMMIT_SHA: ${{ github.sha }}
         WORKING_DIR: ${{ inputs.working_directory }}
@@ -307,6 +329,7 @@ runs:
           const prNumber = parseInt(process.env.PR_NUMBER);
           const deploymentUrl = process.env.DEPLOYMENT_URL;
           const previewUrl = process.env.PREVIEW_URL;
+          const versionUrl = process.env.VERSION_URL;
           const versionId = process.env.VERSION_ID;
           const commitSha = process.env.COMMIT_SHA;
           const workingDir = process.env.WORKING_DIR || '.';
@@ -319,6 +342,11 @@ runs:
           | | |
           |---|---|
           | **Preview URL** | ${deploymentUrl} |`;
+
+          if (versionUrl && versionUrl !== deploymentUrl) {
+            commentBody += `
+          | **Version URL** | ${versionUrl} |`;
+          }
 
           if (versionId) {
             commentBody += `
