@@ -59,8 +59,8 @@ jobs:
 
       - uses: w3dev/cloudflare-worker-deploy@main
         with:
-          cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-          cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
 
 ### Production Deployment (on merge to main)
@@ -80,8 +80,8 @@ jobs:
 
       - uses: w3dev/cloudflare-worker-deploy@main
         with:
-          cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-          cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           environment: production
 ```
 
@@ -90,8 +90,8 @@ jobs:
 ```yaml
 - uses: w3dev/cloudflare-worker-deploy@main
   with:
-    cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-    cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+    cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     working_directory: 'apps/api'
     alias_prefix: 'api'  # Creates api-pr-123-{worker}.{subdomain}.workers.dev
 ```
@@ -101,8 +101,8 @@ jobs:
 ```yaml
 - uses: w3dev/cloudflare-worker-deploy@main
   with:
-    cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-    cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+    cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     prebuild_script: |
       npm run generate
       npm run build
@@ -113,8 +113,8 @@ jobs:
 ```yaml
 - uses: w3dev/cloudflare-worker-deploy@main
   with:
-    cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-    cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+    cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     package_manager: 'pnpm'
 ```
 
@@ -123,8 +123,8 @@ jobs:
 ```yaml
 - uses: w3dev/cloudflare-worker-deploy@main
   with:
-    cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-    cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+    cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     environment: production
     predeploy_script: |
       echo "Running pre-deployment checks..."
@@ -161,8 +161,8 @@ jobs:
 
       - uses: w3dev/cloudflare-worker-deploy@main
         with:
-          cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-          cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
 
 When triggered manually with a PR number, the action will:
@@ -216,7 +216,7 @@ When triggered manually with a PR number, the action will:
 2. Create a token with the following permissions:
    - Account > Workers Scripts > Edit
    - Account > Account Settings > Read
-3. Copy the token and add it as a GitHub secret (`CF_API_TOKEN`)
+3. Copy the token and add it as a GitHub secret (`CLOUDFLARE_API_TOKEN`)
 
 ### Finding Your Account ID
 
@@ -254,8 +254,8 @@ jobs:
       - uses: w3dev/cloudflare-worker-deploy@main
         id: deploy
         with:
-          cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
-          cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           package_manager: 'bun'
           working_directory: 'apps/api'
           alias_prefix: 'api'

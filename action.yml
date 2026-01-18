@@ -1,6 +1,6 @@
 name: 'Cloudflare Workers Deploy'
 description: 'Deploy preview and production environments to Cloudflare Workers'
-author: 'W3Dev'
+author: 'w3dev'
 
 branding:
   icon: 'upload-cloud'
