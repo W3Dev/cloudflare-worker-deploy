@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: W3Dev/wrangler-deploy@main
+      - uses: w3dev/cloudflare-worker-deploy@main
         with:
           cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -78,7 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: W3Dev/wrangler-deploy@main
+      - uses: w3dev/cloudflare-worker-deploy@main
         with:
           cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -88,7 +88,7 @@ jobs:
 ### Monorepo Usage
 
 ```yaml
-- uses: W3Dev/wrangler-deploy@main
+- uses: w3dev/cloudflare-worker-deploy@main
   with:
     cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
     cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -99,7 +99,7 @@ jobs:
 ### With Prebuild Script
 
 ```yaml
-- uses: W3Dev/wrangler-deploy@main
+- uses: w3dev/cloudflare-worker-deploy@main
   with:
     cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
     cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -111,7 +111,7 @@ jobs:
 ### Using pnpm
 
 ```yaml
-- uses: W3Dev/wrangler-deploy@main
+- uses: w3dev/cloudflare-worker-deploy@main
   with:
     cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
     cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -121,7 +121,7 @@ jobs:
 ### With Pre-deploy Script
 
 ```yaml
-- uses: W3Dev/wrangler-deploy@main
+- uses: w3dev/cloudflare-worker-deploy@main
   with:
     cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
     cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -159,7 +159,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: W3Dev/wrangler-deploy@main
+      - uses: w3dev/cloudflare-worker-deploy@main
         with:
           cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CF_ACCOUNT_ID }}
@@ -251,7 +251,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: W3Dev/wrangler-deploy@main
+      - uses: w3dev/cloudflare-worker-deploy@main
         id: deploy
         with:
           cloudflare_api_token: ${{ secrets.CF_API_TOKEN }}
