@@ -198,15 +198,16 @@ runs:
           EXIT_CODE=$?
           set -e
           echo "$OUTPUT"
+          CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
 
           # Check if deployment succeeded (wrangler may return non-zero for warnings)
-          if ! echo "$OUTPUT" | grep -qE "(Uploaded|Published)"; then
+          if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -qE "(Uploaded|Published)"; then
             echo "Deployment failed with exit code $EXIT_CODE"
             exit 1
           fi
 
           # Parse production URL from output
-          DEPLOYMENT_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
+          DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
         else
           # Preview: upload version with alias (preserves secrets/bindings)
@@ -216,22 +217,23 @@ runs:
             EXIT_CODE=$?
             set -e
             echo "$OUTPUT"
+            CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
 
             # Check if upload succeeded (wrangler may return non-zero for warnings)
-            if ! echo "$OUTPUT" | grep -q "Uploaded"; then
+            if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -q "Uploaded"; then
               echo "Deployment failed with exit code $EXIT_CODE"
               exit 1
             fi
 
             # Parse version ID from output
-            VERSION_ID=$(echo "$OUTPUT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1 || echo "")
+            VERSION_ID=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1 || echo "")
 
             # Parse URLs from output
             # Get the version-based URL (e.g., https://a05306a7-worker.subdomain.workers.dev)
-            VERSION_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || echo "")
+            VERSION_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || echo "")
 
             # Try to find aliased URL in output, or construct it from version URL
-            ALIASED_URL=$(echo "$OUTPUT" | grep -oE "https://${PREVIEW_ALIAS}[^[:space:]]*\.workers\.dev" | head -1 || echo "")
+            ALIASED_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE "https://${PREVIEW_ALIAS}[^[:space:]]*\.workers\.dev" | head -1 || echo "")
             if [ -z "$ALIASED_URL" ] && [ -n "$VERSION_URL" ]; then
               # Construct aliased URL from version URL
               # Pattern: https://{version-id}-{worker-name}.{subdomain}.workers.dev
@@ -256,14 +258,15 @@ runs:
             EXIT_CODE=$?
             set -e
             echo "$OUTPUT"
+            CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
 
             # Check if deployment succeeded (wrangler may return non-zero for warnings)
-            if ! echo "$OUTPUT" | grep -qE "(Uploaded|Published)"; then
+            if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -qE "(Uploaded|Published)"; then
               echo "Deployment failed with exit code $EXIT_CODE"
               exit 1
             fi
 
-            DEPLOYMENT_URL=$(echo "$OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
+            DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
             echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
           fi
         fi
