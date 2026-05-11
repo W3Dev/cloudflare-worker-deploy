@@ -57,6 +57,10 @@ inputs:
     description: 'Wrangler CLI version (e.g., 4.42.0 or latest)'
     required: false
     default: 'latest'
+  pnpm_version:
+    description: 'pnpm version to install. Leave empty to use the `packageManager` field from package.json (recommended).'
+    required: false
+    default: ''
 
 outputs:
   deployment_url:
@@ -129,7 +133,7 @@ runs:
       if: inputs.package_manager == 'pnpm'
       uses: pnpm/action-setup@v4
       with:
-        version: latest
+        version: ${{ inputs.pnpm_version }}
 
     - name: Install dependencies
       shell: bash

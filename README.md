@@ -191,6 +191,7 @@ When triggered manually with a PR number, the action will:
 | `environment` | Deployment environment (`preview` or `production`) | No | `preview` |
 | `github_token` | Token for PR comments | No | `github.token` |
 | `wrangler_version` | Wrangler CLI version (e.g., `4.42.0`) | No | `latest` |
+| `pnpm_version` | pnpm version. Leave empty to use `packageManager` from `package.json` | No | - |
 
 ## Outputs
 
