@@ -210,8 +210,8 @@ runs:
             exit 1
           fi
 
-          # Parse production URL from output
-          DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
+          # Parse production URL from output (may be empty for route-based workers)
+          DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || true)
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
         else
           # Preview: upload version with alias (preserves secrets/bindings)
@@ -270,7 +270,7 @@ runs:
               exit 1
             fi
 
-            DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1)
+            DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || true)
             echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
           fi
         fi
