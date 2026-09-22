@@ -284,30 +284,30 @@ runs:
         COMMIT_SHA: ${{ github.sha }}
         ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        if [ "$ENVIRONMENT" == "production" ]; then
-          echo "## Cloudflare Workers Production Deployed" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "## Cloudflare Workers Preview Deployed" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| | |" >> $GITHUB_STEP_SUMMARY
-        echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-        if [ "$ENVIRONMENT" == "production" ]; then
-          echo "| **Deployment URL** | ${DEPLOYMENT_URL:-Not emitted (route-based Worker)} |" >> $GITHUB_STEP_SUMMARY
-        else
-          printf '| **Preview name** | `%s` |\n' "$PREVIEW_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Preview URL** | ${PREVIEW_URL:-Not emitted; check preview_urls and Wrangler config} |" >> $GITHUB_STEP_SUMMARY
-        fi
-        if [ -n "$VERSION_URL" ] && [ "$VERSION_URL" != "$DEPLOYMENT_URL" ]; then
-          echo "| **Unique Deployment URL** | $VERSION_URL |" >> $GITHUB_STEP_SUMMARY
-        fi
-        if [ -n "$VERSION_ID" ]; then
-          echo "| **Deployment ID** | \`$VERSION_ID\` |" >> $GITHUB_STEP_SUMMARY
-        fi
-        if [ -n "$PREVIEW_ID" ]; then
-          echo "| **Preview ID** | \`$PREVIEW_ID\` |" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "| **Commit** | \`$COMMIT_SHA\` |" >> $GITHUB_STEP_SUMMARY
+        {
+          if [ "$ENVIRONMENT" == "production" ]; then
+            printf '%s\n' "## Cloudflare Workers Production Deployed"
+          else
+            printf '%s\n' "## Cloudflare Workers Preview Deployed"
+          fi
+          printf '\n%s\n%s\n' '| | |' '|---|---|'
+          if [ "$ENVIRONMENT" == "production" ]; then
+            printf '%s\n' "| **Deployment URL** | ${DEPLOYMENT_URL:-Not emitted (route-based Worker)} |"
+          else
+            printf "| **Preview name** | \`%s\` |\n" "$PREVIEW_NAME"
+            printf '%s\n' "| **Preview URL** | ${PREVIEW_URL:-Not emitted; check preview_urls and Wrangler config} |"
+          fi
+          if [ -n "$VERSION_URL" ] && [ "$VERSION_URL" != "$DEPLOYMENT_URL" ]; then
+            printf '%s\n' "| **Unique Deployment URL** | $VERSION_URL |"
+          fi
+          if [ -n "$VERSION_ID" ]; then
+            printf '%s\n' "| **Deployment ID** | \`$VERSION_ID\` |"
+          fi
+          if [ -n "$PREVIEW_ID" ]; then
+            printf '%s\n' "| **Preview ID** | \`$PREVIEW_ID\` |"
+          fi
+          printf '%s\n' "| **Commit** | \`$COMMIT_SHA\` |"
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Comment on PR
       if: steps.context.outputs.pr_number != '' && inputs.environment != 'production' && inputs.teardown != 'true'
