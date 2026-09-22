@@ -1,6 +1,6 @@
 # Worker Previews v2 implementation plan
 
-Status: implementation complete locally on `worker-previews-v2`; pending parent review before publishing.
+Status: implementation complete on `worker-previews-v2`; CI passed at the release candidate commit before tagging.
 
 ## Contract verified before implementation
 
@@ -19,6 +19,7 @@ Status: implementation complete locally on `worker-previews-v2`; pending parent 
 - [x] Add mocked command tests for preview, malformed output, failure, teardown, production, and unsafe input cases.
 - [x] Add action metadata/YAML/shell validation in CI.
 - [x] Update README and maintenance notes for v1 to v2 migration, config/secrets/isolation, custom domains, and debugging.
-- [x] Run checks, inspect the final diff, and commit with normal hooks. Do not push or tag in this phase.
+- [x] Run checks, inspect the final diff, and commit with normal hooks.
+- [x] Push the release branch and pass the repository validation workflow at the release candidate commit.
 
 Local validation uses mocked Wrangler commands and does not contact Cloudflare. A live deployment remains pending valid credentials and a consuming workflow.
