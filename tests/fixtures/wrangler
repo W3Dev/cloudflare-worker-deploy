@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+args_file=${MOCK_ARGS_FILE:?MOCK_ARGS_FILE must be set}
+mode=${MOCK_MODE:-}
+printf '%s\n' "$@" > "$args_file"
+
+if [[ "${1:-}" == --version ]]; then
+  printf '%s\n' "${MOCK_WRANGLER_VERSION:-4.135.0}"
+  exit "${MOCK_VERSION_EXIT:-0}"
+fi
+
+case "${1:-}" in
+  preview)
+    if [[ "${2:-}" == delete ]]; then
+      case "$mode" in
+        teardown-success)
+          printf 'Preview deleted\n'
+          exit 0
+          ;;
+        teardown-failure)
+          printf 'delete failed\n' >&2
+          exit 23
+          ;;
+      esac
+    fi
+
+    case "$mode" in
+      preview-success)
+        printf '%s\n' '{"preview":{"id":"preview-id","name":"feature-login","urls":["https://feature-login.example.workers.dev","https://feature-login.example.test"]},"deployment":{"id":"deployment-id","urls":["https://deployment-id-feature-login.example.workers.dev"]}}'
+        ;;
+      preview-no-urls)
+        printf '%s\n' '{"preview":{"id":"preview-id","name":"feature-login","urls":[]},"deployment":{"id":"deployment-id","urls":[]}}'
+        ;;
+      preview-malformed)
+        printf '%s\n' '{"preview":{},"deployment":{}}'
+        ;;
+      preview-invalid-json)
+        printf '%s\n' '{not-json'
+        ;;
+      preview-failure)
+        printf 'preview failed\n' >&2
+        exit 19
+        ;;
+      *)
+        printf 'unknown preview mock mode: %s\n' "$mode" >&2
+        exit 64
+        ;;
+    esac
+    ;;
+  deploy)
+    case "$mode" in
+      production-success)
+        printf 'Published https://worker.example.workers.dev\n'
+        ;;
+      production-route)
+        printf 'Published route-based Worker\n'
+        ;;
+      production-failure)
+        printf 'deploy failed\n' >&2
+        exit 17
+        ;;
+      *)
+        printf 'unknown deploy mock mode: %s\n' "$mode" >&2
+        exit 64
+        ;;
+    esac
+    ;;
+  *)
+    printf 'unexpected Wrangler command: %s\n' "${1:-<none>}" >&2
+    exit 64
+    ;;
+esac

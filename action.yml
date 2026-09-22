@@ -295,7 +295,7 @@ runs:
         if [ "$ENVIRONMENT" == "production" ]; then
           echo "| **Deployment URL** | ${DEPLOYMENT_URL:-Not emitted (route-based Worker)} |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| **Preview name** | `$PREVIEW_NAME` |" >> $GITHUB_STEP_SUMMARY
+          printf '| **Preview name** | `%s` |\n' "$PREVIEW_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Preview URL** | ${PREVIEW_URL:-Not emitted; check preview_urls and Wrangler config} |" >> $GITHUB_STEP_SUMMARY
         fi
         if [ -n "$VERSION_URL" ] && [ "$VERSION_URL" != "$DEPLOYMENT_URL" ]; then
