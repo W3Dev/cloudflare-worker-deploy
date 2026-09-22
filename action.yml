@@ -14,7 +14,7 @@ inputs:
     description: 'Cloudflare Account ID'
     required: true
   teardown:
-    description: 'Delete preview alias when PR closes'
+    description: 'Delete the named Worker Preview when a PR closes'
     required: false
     default: 'false'
   package_manager:
@@ -30,7 +30,11 @@ inputs:
     required: false
     default: '.'
   alias_prefix:
-    description: 'Prefix for preview alias (e.g., "api" creates api-pr-123-{worker}.workers.dev)'
+    description: 'Prefix for an automatically derived pull request preview name'
+    required: false
+    default: ''
+  preview_name:
+    description: 'Explicit Worker Preview name. Required for non-PR preview runs.'
     required: false
     default: ''
   prebuild_script:
@@ -54,9 +58,9 @@ inputs:
     required: false
     default: ''
   wrangler_version:
-    description: 'Wrangler CLI version (e.g., 4.42.0 or latest)'
+    description: 'Wrangler CLI version (must be 4.135.0 or newer for previews)'
     required: false
-    default: 'latest'
+    default: '4.135.0'
   pnpm_version:
     description: 'pnpm version to install. Leave empty to use the `packageManager` field from package.json (recommended).'
     required: false
@@ -64,17 +68,32 @@ inputs:
 
 outputs:
   deployment_url:
-    description: 'The Cloudflare Workers deployment URL (production) or preview URL'
-    value: ${{ steps.deploy.outputs.url }}
+    description: 'Stable Worker Preview URL, or the production workers.dev URL when one is emitted'
+    value: ${{ steps.deploy.outputs.deployment_url }}
   preview_url:
-    description: 'The aliased preview URL (for preview deployments)'
+    description: 'Stable Worker Preview URL (the latest deployment for the named Preview)'
     value: ${{ steps.deploy.outputs.preview_url }}
   version_url:
-    description: 'The version-specific preview URL (for preview deployments)'
+    description: 'Unique URL for the current Preview deployment (v1 compatibility name)'
     value: ${{ steps.deploy.outputs.version_url }}
   version_id:
-    description: 'The uploaded version ID'
+    description: 'Current Preview deployment ID (v1 compatibility name)'
     value: ${{ steps.deploy.outputs.version_id }}
+  preview_name:
+    description: 'The resolved Worker Preview name'
+    value: ${{ steps.context.outputs.preview_name }}
+  preview_id:
+    description: 'The Worker Preview resource ID'
+    value: ${{ steps.deploy.outputs.preview_id }}
+  deployment_id:
+    description: 'The current Preview deployment resource ID'
+    value: ${{ steps.deploy.outputs.deployment_id }}
+  preview_urls:
+    description: 'JSON array of all stable Preview URLs'
+    value: ${{ steps.deploy.outputs.preview_urls }}
+  deployment_urls:
+    description: 'JSON array of all unique Preview deployment URLs'
+    value: ${{ steps.deploy.outputs.deployment_urls }}
   pr_number:
     description: 'The PR number (if applicable)'
     value: ${{ steps.context.outputs.pr_number }}
@@ -87,41 +106,27 @@ runs:
       shell: bash
       env:
         ENVIRONMENT: ${{ inputs.environment }}
+        TEARDOWN: ${{ inputs.teardown }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        DISPATCH_PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        PREVIEW_NAME: ${{ inputs.preview_name }}
         ALIAS_PREFIX: ${{ inputs.alias_prefix }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        echo "is_production=${{ inputs.environment == 'production' }}" >> $GITHUB_OUTPUT
-
-        # Skip alias generation for production deployments
-        if [ "$ENVIRONMENT" == "production" ]; then
-          echo "pr_number=" >> $GITHUB_OUTPUT
-          echo "preview_alias=" >> $GITHUB_OUTPUT
-        elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          if [ -n "${{ github.event.inputs.pr_number }}" ]; then
-            PR_NUM="${{ github.event.inputs.pr_number }}"
-            echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
-            if [ -n "$ALIAS_PREFIX" ]; then
-              echo "preview_alias=${ALIAS_PREFIX}-pr-${PR_NUM}" >> $GITHUB_OUTPUT
-            else
-              echo "preview_alias=pr-${PR_NUM}" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "pr_number=" >> $GITHUB_OUTPUT
-            echo "preview_alias=" >> $GITHUB_OUTPUT
-          fi
-        else
-          PR_NUM="${{ github.event.pull_request.number }}"
-          echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
-          if [ -n "$ALIAS_PREFIX" ]; then
-            echo "preview_alias=${ALIAS_PREFIX}-pr-${PR_NUM}" >> $GITHUB_OUTPUT
-          else
-            echo "preview_alias=pr-${PR_NUM}" >> $GITHUB_OUTPUT
-          fi
-        fi
+        bash "$ACTION_PATH/scripts/resolve-context.sh"
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node_version }}
+
+    - name: Verify Node.js version
+      shell: bash
+      env:
+        REQUIRED_NODE_MAJOR: '22'
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/check-node-version.sh"
 
     - name: Setup Bun
       if: inputs.package_manager == 'bun'
@@ -136,20 +141,24 @@ runs:
         version: ${{ inputs.pnpm_version }}
 
     - name: Install dependencies
+      if: inputs.teardown != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
         INSTALL_CMD: ${{ inputs.install_command }}
         PKG_MANAGER: ${{ inputs.package_manager }}
       run: |
+        case "$PKG_MANAGER" in
+          bun) default_install=(bun install) ;;
+          npm) default_install=(npm ci) ;;
+          pnpm) default_install=(pnpm install) ;;
+          *) echo "Unsupported package_manager: $PKG_MANAGER" >&2; exit 1 ;;
+        esac
+
         if [ -n "$INSTALL_CMD" ]; then
-          eval "$INSTALL_CMD"
-        elif [ "$PKG_MANAGER" == "bun" ]; then
-          bun install
-        elif [ "$PKG_MANAGER" == "pnpm" ]; then
-          pnpm install
+          bash -euo pipefail -c "$INSTALL_CMD"
         else
-          npm ci
+          "${default_install[@]}"
         fi
 
     - name: Install Wrangler CLI
@@ -158,6 +167,11 @@ runs:
         PKG_MANAGER: ${{ inputs.package_manager }}
         WRANGLER_VERSION: ${{ inputs.wrangler_version }}
       run: |
+        case "$PKG_MANAGER" in
+          bun|npm|pnpm) ;;
+          *) echo "Unsupported package_manager: $PKG_MANAGER" >&2; exit 1 ;;
+        esac
+
         if [ "$WRANGLER_VERSION" == "latest" ]; then
           PACKAGE="wrangler"
         else
@@ -172,17 +186,28 @@ runs:
           npm install -g "$PACKAGE"
         fi
 
+    - name: Verify Wrangler version
+      shell: bash
+      env:
+        REQUIRED_WRANGLER_VERSION: '4.135.0'
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/check-wrangler-version.sh"
+
     - name: Run prebuild script
-      if: inputs.prebuild_script != ''
+      if: inputs.prebuild_script != '' && inputs.teardown != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: ${{ inputs.prebuild_script }}
+      env:
+        PREBUILD_SCRIPT: ${{ inputs.prebuild_script }}
+      run: bash -euo pipefail -c "$PREBUILD_SCRIPT"
 
     - name: Run predeploy script
-      if: inputs.predeploy_script != ''
+      if: inputs.predeploy_script != '' && inputs.teardown != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: ${{ inputs.predeploy_script }}
+      env:
+        PREDEPLOY_SCRIPT: ${{ inputs.predeploy_script }}
+      run: bash -euo pipefail -c "$PREDEPLOY_SCRIPT"
 
     - name: Deploy to Cloudflare Workers
       id: deploy
@@ -192,104 +217,58 @@ runs:
       env:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare_api_token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id }}
-        PREVIEW_ALIAS: ${{ steps.context.outputs.preview_alias }}
         ENVIRONMENT: ${{ inputs.environment }}
+        TEARDOWN: ${{ inputs.teardown }}
+        PREVIEW_NAME: ${{ steps.context.outputs.preview_name }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        if [ "$ENVIRONMENT" == "production" ]; then
-          # Production: upload and deploy immediately
-          set +e
-          OUTPUT=$(wrangler deploy 2>&1)
-          EXIT_CODE=$?
-          set -e
-          echo "$OUTPUT"
-          CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
+        bash "$ACTION_PATH/scripts/deploy.sh"
 
-          # Check if deployment succeeded (wrangler may return non-zero for warnings)
-          if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -qE "(Uploaded|Published)"; then
-            echo "Deployment failed with exit code $EXIT_CODE"
-            exit 1
-          fi
-
-          # Parse production URL from output (may be empty for route-based workers)
-          DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || true)
-          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
-        else
-          # Preview: upload version with alias (preserves secrets/bindings)
-          if [ -n "$PREVIEW_ALIAS" ]; then
-            set +e
-            OUTPUT=$(wrangler versions upload --preview-alias "$PREVIEW_ALIAS" 2>&1)
-            EXIT_CODE=$?
-            set -e
-            echo "$OUTPUT"
-            CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
-
-            # Check if upload succeeded (wrangler may return non-zero for warnings)
-            if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -q "Uploaded"; then
-              echo "Deployment failed with exit code $EXIT_CODE"
-              exit 1
-            fi
-
-            # Parse version ID from output
-            VERSION_ID=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -1 || echo "")
-
-            # Parse URLs from output
-            # Get the version-based URL (e.g., https://a05306a7-worker.subdomain.workers.dev)
-            VERSION_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || echo "")
-
-            # Try to find aliased URL in output, or construct it from version URL
-            ALIASED_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE "https://${PREVIEW_ALIAS}[^[:space:]]*\.workers\.dev" | head -1 || echo "")
-            if [ -z "$ALIASED_URL" ] && [ -n "$VERSION_URL" ]; then
-              # Construct aliased URL from version URL
-              # Pattern: https://{version-id}-{worker-name}.{subdomain}.workers.dev
-              # We want: https://{alias}-{worker-name}.{subdomain}.workers.dev
-              WORKER_AND_SUBDOMAIN=$(echo "$VERSION_URL" | sed -E 's|https://[^-]+-||')
-              if [ -n "$WORKER_AND_SUBDOMAIN" ]; then
-                ALIASED_URL="https://${PREVIEW_ALIAS}-${WORKER_AND_SUBDOMAIN}"
-              fi
-            fi
-
-            # Use aliased URL as primary, version URL as secondary
-            PREVIEW_URL="${ALIASED_URL:-$VERSION_URL}"
-
-            echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-            echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
-            echo "version_url=$VERSION_URL" >> $GITHUB_OUTPUT
-            echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
-          else
-            # No alias provided, fall back to regular deploy
-            set +e
-            OUTPUT=$(wrangler deploy 2>&1)
-            EXIT_CODE=$?
-            set -e
-            echo "$OUTPUT"
-            CLEAN_OUTPUT=$(printf '%s\n' "$OUTPUT" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g; s/\r//g')
-
-            # Check if deployment succeeded (wrangler may return non-zero for warnings)
-            if ! printf '%s\n' "$CLEAN_OUTPUT" | grep -qE "(Uploaded|Published)"; then
-              echo "Deployment failed with exit code $EXIT_CODE"
-              exit 1
-            fi
-
-            DEPLOYMENT_URL=$(printf '%s\n' "$CLEAN_OUTPUT" | grep -oE 'https://[^[:space:]]+\.workers\.dev' | head -1 || true)
-            echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
-          fi
-        fi
-
-    - name: Teardown preview alias
+    - name: Delete Worker Preview
       if: inputs.teardown == 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare_api_token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id }}
-        PREVIEW_ALIAS: ${{ steps.context.outputs.preview_alias }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        TEARDOWN: ${{ inputs.teardown }}
+        PREVIEW_NAME: ${{ steps.context.outputs.preview_name }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        # Note: Cloudflare auto-cleans older aliases (keeps last 1000)
-        # There's no direct CLI command to delete an alias
-        # The alias will be overwritten on next upload or auto-expire
-        echo "Teardown requested for alias: $PREVIEW_ALIAS"
-        echo "Note: Cloudflare automatically manages alias cleanup (keeps last 1000 aliases)"
-        echo "The alias will be overwritten on next deployment or expire automatically"
+        bash "$ACTION_PATH/scripts/deploy.sh"
+
+    - name: Remove Preview PR comment
+      if: steps.context.outputs.pr_number != '' && inputs.environment != 'production' && inputs.teardown == 'true'
+      uses: actions/github-script@v7
+      env:
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        PREVIEW_NAME: ${{ steps.context.outputs.preview_name }}
+        WORKING_DIR: ${{ inputs.working_directory }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const prNumber = parseInt(process.env.PR_NUMBER);
+          const previewName = process.env.PREVIEW_NAME;
+          const workingDir = process.env.WORKING_DIR || '.';
+          const marker = `<!-- cloudflare-workers-preview-${workingDir}-${previewName} -->`;
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+            per_page: 100
+          });
+          const existingComment = comments.find(comment =>
+            comment.user.login === 'github-actions[bot]' &&
+            comment.body.includes(marker)
+          );
+          if (existingComment) {
+            await github.rest.issues.deleteComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id
+            });
+          }
 
     - name: Add deployment summary
       if: inputs.teardown != 'true'
@@ -299,6 +278,9 @@ runs:
         PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         VERSION_URL: ${{ steps.deploy.outputs.version_url }}
         VERSION_ID: ${{ steps.deploy.outputs.version_id }}
+        PREVIEW_NAME: ${{ steps.context.outputs.preview_name }}
+        PREVIEW_ID: ${{ steps.deploy.outputs.preview_id }}
+        DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
         COMMIT_SHA: ${{ github.sha }}
         ENVIRONMENT: ${{ inputs.environment }}
       run: |
@@ -310,12 +292,20 @@ runs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| | |" >> $GITHUB_STEP_SUMMARY
         echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Preview URL** | $DEPLOYMENT_URL |" >> $GITHUB_STEP_SUMMARY
+        if [ "$ENVIRONMENT" == "production" ]; then
+          echo "| **Deployment URL** | ${DEPLOYMENT_URL:-Not emitted (route-based Worker)} |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| **Preview name** | `$PREVIEW_NAME` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Preview URL** | ${PREVIEW_URL:-Not emitted; check preview_urls and Wrangler config} |" >> $GITHUB_STEP_SUMMARY
+        fi
         if [ -n "$VERSION_URL" ] && [ "$VERSION_URL" != "$DEPLOYMENT_URL" ]; then
-          echo "| **Version URL** | $VERSION_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Unique Deployment URL** | $VERSION_URL |" >> $GITHUB_STEP_SUMMARY
         fi
         if [ -n "$VERSION_ID" ]; then
-          echo "| **Version ID** | \`$VERSION_ID\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployment ID** | \`$VERSION_ID\` |" >> $GITHUB_STEP_SUMMARY
+        fi
+        if [ -n "$PREVIEW_ID" ]; then
+          echo "| **Preview ID** | \`$PREVIEW_ID\` |" >> $GITHUB_STEP_SUMMARY
         fi
         echo "| **Commit** | \`$COMMIT_SHA\` |" >> $GITHUB_STEP_SUMMARY
 
@@ -328,6 +318,9 @@ runs:
         PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         VERSION_URL: ${{ steps.deploy.outputs.version_url }}
         VERSION_ID: ${{ steps.deploy.outputs.version_id }}
+        PREVIEW_NAME: ${{ steps.context.outputs.preview_name }}
+        PREVIEW_ID: ${{ steps.deploy.outputs.preview_id }}
+        DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
         COMMIT_SHA: ${{ github.sha }}
         WORKING_DIR: ${{ inputs.working_directory }}
       with:
@@ -338,9 +331,13 @@ runs:
           const previewUrl = process.env.PREVIEW_URL;
           const versionUrl = process.env.VERSION_URL;
           const versionId = process.env.VERSION_ID;
+          const previewName = process.env.PREVIEW_NAME;
+          const previewId = process.env.PREVIEW_ID;
+          const deploymentId = process.env.DEPLOYMENT_ID;
           const commitSha = process.env.COMMIT_SHA;
           const workingDir = process.env.WORKING_DIR || '.';
-          const marker = `<!-- cloudflare-workers-preview-${workingDir} -->`;
+          const marker = `<!-- cloudflare-workers-preview-${workingDir}-${previewName} -->`;
+          const primaryUrl = previewUrl || deploymentUrl || 'No URL returned; check the Worker Preview configuration.';
 
           let commentBody = `${marker}
 
@@ -348,16 +345,22 @@ runs:
 
           | | |
           |---|---|
-          | **Preview URL** | ${deploymentUrl} |`;
+          | **Preview name** | \`${previewName}\` |
+          | **Preview URL** | ${primaryUrl} |`;
 
           if (versionUrl && versionUrl !== deploymentUrl) {
             commentBody += `
-          | **Version URL** | ${versionUrl} |`;
+          | **Unique Deployment URL** | ${versionUrl} |`;
           }
 
-          if (versionId) {
+          if (previewId) {
             commentBody += `
-          | **Version ID** | \`${versionId}\` |`;
+          | **Preview ID** | \`${previewId}\` |`;
+          }
+
+          if (deploymentId || versionId) {
+            commentBody += `
+          | **Deployment ID** | \`${deploymentId || versionId}\` |`;
           }
 
           commentBody += `
