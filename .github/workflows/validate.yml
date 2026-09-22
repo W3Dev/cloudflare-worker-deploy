@@ -32,4 +32,6 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
       - name: Validate workflow syntax
-        run: "$(go env GOPATH)/bin/actionlint"
+        run: |
+          go_path="$(go env GOPATH)"
+          "$go_path/bin/actionlint"
