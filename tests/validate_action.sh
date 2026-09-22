@@ -57,10 +57,11 @@ env \
 grep -Fqx -- "| **Preview name** | \`feature/login\` |" "$summary_output"
 printf 'Embedded deployment summary shell passes syntax and execution checks.\n'
 
-for script in "$root_dir"/scripts/*.sh "$root_dir"/tests/*.sh "$root_dir"/tests/fixtures/wrangler; do
+for script in "$root_dir"/scripts/*.sh "$root_dir"/tests/*.sh "$root_dir"/tests/fixtures/wrangler "$root_dir"/tests/live-preview-smoke/scripts/*.sh; do
   bash -n "$script"
 done
 node --check "$root_dir/scripts/parse-preview-json.mjs"
+node --check "$root_dir/tests/fixtures/live-worker/src/index.js"
 
 if grep -R -n -F -- 'wrangler versions upload --preview-alias' "$root_dir/action.yml" "$root_dir/scripts"; then
   printf 'legacy alias upload command remains in v2 implementation\n' >&2

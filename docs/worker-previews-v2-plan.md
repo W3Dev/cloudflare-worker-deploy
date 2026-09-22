@@ -1,6 +1,6 @@
 # Worker Previews v2 implementation plan
 
-Status: implementation complete on `worker-previews-v2`; CI passed at the release candidate commit before tagging.
+Status: Worker Preview v2 is released at `d4725fb`; the manual live smoke workflow is included and awaits configured secrets and a live run.
 
 ## Contract verified before implementation
 
@@ -21,5 +21,9 @@ Status: implementation complete on `worker-previews-v2`; CI passed at the releas
 - [x] Update README and maintenance notes for v1 to v2 migration, config/secrets/isolation, custom domains, and debugging.
 - [x] Run checks, inspect the final diff, and commit with normal hooks.
 - [x] Push the release branch and pass the repository validation workflow at the release candidate commit.
+- [x] Add a manual-only live Preview smoke fixture and workflow using the published `@v2` action.
+- [ ] Run the live smoke workflow with configured disposable-account credentials and record the create, update, HTTP, teardown, and parent-Worker deletion evidence.
 
-Local validation uses mocked Wrangler commands and does not contact Cloudflare. A live deployment remains pending valid credentials and a consuming workflow.
+Local validation uses mocked Wrangler commands and does not contact Cloudflare. The live smoke run remains pending valid credentials.
+
+The live workflow preflights `GET /accounts/{account_id}/workers/workers/{worker_name}` for HTTP 404, verifies `GET /accounts/{account_id}/workers/workers/{worker_name}/previews/{preview_name}` returns HTTP 404 after action teardown, and only then deletes the uniquely generated parent Worker.

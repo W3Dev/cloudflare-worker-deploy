@@ -376,6 +376,14 @@ Start with the action summary and PR comment: they include the Preview name, sta
 
 The local validation suite uses mocked Wrangler commands and never contacts Cloudflare. A real deployment still requires a consuming workflow with valid credentials and a Worker configuration.
 
+## Manual live Preview smoke test
+
+The manual `Live Worker Preview smoke test` workflow in `.github/workflows/live-preview-smoke.yml` exercises the published `w3dev/cloudflare-worker-deploy@v2` action against a disposable Worker fixture in `tests/fixtures/live-worker`. It creates a unique Worker and Preview name from the workflow run, confirms the Worker does not already exist, deploys the first Preview, updates the same Preview with a second response, checks the stable and unique URLs over HTTP, tears the Preview down, and verifies that the dedicated parent Worker is deleted.
+
+Run it from the repository's **Actions** tab with a repository secret named `CLOUDFLARE_API_TOKEN` and one named `CLOUDFLARE_ACCOUNT_ID`. The workflow is `workflow_dispatch` only, uses Wrangler 4.135.0 and `npm ci` from the fixture lockfile, and never invokes the production deployment path. Use an account where workers.dev Preview URLs are enabled. If the account requires a custom Preview domain or blocks workers.dev URLs, the HTTP assertions cannot pass until the fixture configuration and test URL are changed deliberately.
+
+The preflight and cleanup calls use the Cloudflare Workers API with the same token, and the workflow does not explicitly print token or account values. After the action teardown, it polls the Preview endpoint until the Preview returns HTTP 404, then deletes and verifies the dedicated parent Worker. The parent Worker is deleted only when preflight proved that the generated name was absent before the run. A failed run still attempts Preview teardown and parent cleanup through `always()` steps.
+
 ## License
 
 MIT

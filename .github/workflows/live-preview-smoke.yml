@@ -1,0 +1,136 @@
+name: Live Worker Preview smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIXTURE_DIR: tests/fixtures/live-worker
+
+    steps:
+      - name: Check out smoke fixture
+        uses: actions/checkout@v4
+
+      - name: Render unique Worker configuration
+        id: prepare
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          worker_name="w3dev-live-preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          preview_name="live-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fixture_path="$GITHUB_WORKSPACE/$FIXTURE_DIR"
+
+          printf 'worker_name=%s\n' "$worker_name" >> "$GITHUB_OUTPUT"
+          printf 'preview_name=%s\n' "$preview_name" >> "$GITHUB_OUTPUT"
+          bash "$GITHUB_WORKSPACE/tests/live-preview-smoke/scripts/render-config.sh" "$fixture_path" "$worker_name"
+          bash "$GITHUB_WORKSPACE/tests/live-preview-smoke/scripts/render-marker.sh" "$fixture_path" one
+
+      - name: Confirm dedicated Worker is absent
+        id: preflight
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ steps.prepare.outputs.worker_name }}
+        run: bash tests/live-preview-smoke/scripts/preflight-parent.sh
+
+      - name: Create first Worker Preview
+        id: preview_one
+        uses: W3Dev/cloudflare-worker-deploy@v2
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          package_manager: npm
+          node_version: '22'
+          working_directory: tests/fixtures/live-worker
+          environment: preview
+          preview_name: ${{ steps.prepare.outputs.preview_name }}
+          wrangler_version: 4.135.0
+
+      - name: Verify first Preview output and HTTP response
+        shell: bash
+        env:
+          MODE: initial
+          EXPECTED_VERSION: one
+          PREVIEW_URL: ${{ steps.preview_one.outputs.preview_url }}
+          UNIQUE_URL: ${{ steps.preview_one.outputs.version_url }}
+          PREVIEW_ID: ${{ steps.preview_one.outputs.preview_id }}
+          DEPLOYMENT_ID: ${{ steps.preview_one.outputs.deployment_id }}
+          PREVIEW_URLS: ${{ steps.preview_one.outputs.preview_urls }}
+          DEPLOYMENT_URLS: ${{ steps.preview_one.outputs.deployment_urls }}
+        run: bash tests/live-preview-smoke/scripts/assert-preview.sh
+
+      - name: Change fixture response
+        shell: bash
+        run: bash tests/live-preview-smoke/scripts/render-marker.sh "$GITHUB_WORKSPACE/$FIXTURE_DIR" two
+
+      - name: Update the same Worker Preview
+        id: preview_two
+        uses: W3Dev/cloudflare-worker-deploy@v2
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          package_manager: npm
+          node_version: '22'
+          working_directory: tests/fixtures/live-worker
+          environment: preview
+          preview_name: ${{ steps.prepare.outputs.preview_name }}
+          wrangler_version: 4.135.0
+
+      - name: Verify Preview update and immutable deployment URL
+        shell: bash
+        env:
+          MODE: update
+          EXPECTED_VERSION: two
+          PREVIEW_URL: ${{ steps.preview_two.outputs.preview_url }}
+          UNIQUE_URL: ${{ steps.preview_two.outputs.version_url }}
+          PREVIEW_ID: ${{ steps.preview_two.outputs.preview_id }}
+          DEPLOYMENT_ID: ${{ steps.preview_two.outputs.deployment_id }}
+          PREVIEW_URLS: ${{ steps.preview_two.outputs.preview_urls }}
+          DEPLOYMENT_URLS: ${{ steps.preview_two.outputs.deployment_urls }}
+          FIRST_PREVIEW_URL: ${{ steps.preview_one.outputs.preview_url }}
+          FIRST_UNIQUE_URL: ${{ steps.preview_one.outputs.version_url }}
+          FIRST_PREVIEW_ID: ${{ steps.preview_one.outputs.preview_id }}
+          FIRST_DEPLOYMENT_ID: ${{ steps.preview_one.outputs.deployment_id }}
+        run: bash tests/live-preview-smoke/scripts/assert-preview.sh
+
+      - name: Delete Worker Preview
+        if: ${{ always() && steps.preflight.outputs.parent_worker_absent == 'true' }}
+        uses: W3Dev/cloudflare-worker-deploy@v2
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          package_manager: npm
+          node_version: '22'
+          working_directory: tests/fixtures/live-worker
+          environment: preview
+          preview_name: ${{ steps.prepare.outputs.preview_name }}
+          teardown: true
+          wrangler_version: 4.135.0
+
+      - name: Verify Worker Preview deletion
+        if: ${{ always() && steps.preflight.outputs.parent_worker_absent == 'true' && steps.preview_one.outcome == 'success' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ steps.prepare.outputs.worker_name }}
+          PREVIEW_NAME: ${{ steps.prepare.outputs.preview_name }}
+        run: bash tests/live-preview-smoke/scripts/verify-preview-deleted.sh
+
+      - name: Delete and verify dedicated parent Worker
+        if: ${{ always() && steps.preflight.outputs.parent_worker_absent == 'true' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_NAME: ${{ steps.prepare.outputs.worker_name }}
+          PARENT_WORKER_ABSENT: ${{ steps.preflight.outputs.parent_worker_absent }}
+        run: bash tests/live-preview-smoke/scripts/delete-parent.sh

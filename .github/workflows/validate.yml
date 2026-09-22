@@ -26,7 +26,7 @@ jobs:
         run: bash tests/test_action.sh
 
       - name: Run ShellCheck
-        run: shellcheck scripts/*.sh tests/*.sh tests/fixtures/wrangler
+        run: shellcheck scripts/*.sh tests/*.sh tests/fixtures/wrangler tests/live-preview-smoke/scripts/*.sh
 
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
