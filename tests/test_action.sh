@@ -103,6 +103,73 @@ run_version_test() {
   fi
 }
 
+run_install_test() {
+  local manager
+  for manager in bun npm pnpm; do
+    local fake_bin="$tmp_dir/install-$manager/bin"
+    local root="$tmp_dir/install-$manager/root"
+    local args_file="$tmp_dir/install-$manager.args"
+    local path_file="$tmp_dir/install-$manager.path"
+    mkdir -p "$fake_bin" "$root"
+    : > "$args_file"
+    : > "$path_file"
+
+    # Fake package manager: records its arguments and lays out the wrangler bin
+    # in whatever install directory the script handed it.
+    cat > "$fake_bin/$manager" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$MOCK_ARGS_FILE"
+dir=''
+while (( $# )); do
+  case "$1" in
+    --cwd|--dir|--prefix) dir=$2; shift ;;
+  esac
+  shift
+done
+mkdir -p "$dir/node_modules/.bin"
+printf '#!/usr/bin/env bash\n' > "$dir/node_modules/.bin/wrangler"
+chmod +x "$dir/node_modules/.bin/wrangler"
+MOCK
+    chmod +x "$fake_bin/$manager"
+
+    if env \
+      PATH="$fake_bin:$PATH" \
+      MOCK_ARGS_FILE="$args_file" \
+      GITHUB_PATH="$path_file" \
+      WRANGLER_INSTALL_ROOT="$root" \
+      PKG_MANAGER="$manager" \
+      WRANGLER_VERSION=4.135.0 \
+      bash "$root_dir/scripts/install-wrangler.sh" >/dev/null; then
+      if grep -Fxq -- 'wrangler@4.135.0' "$args_file" && ! grep -Fxq -- '-g' "$args_file" && ! grep -Fxq -- '--global' "$args_file"; then
+        pass "$manager installs the pinned Wrangler without a global install"
+      else
+        fail "$manager install arguments (got $(tr '\n' ' ' < "$args_file"))"
+      fi
+      assert_output "$path_file" "$root/wrangler-cli/node_modules/.bin" "$manager exposes Wrangler through GITHUB_PATH"
+    else
+      fail "$manager Wrangler install unexpectedly failed"
+    fi
+  done
+
+  if env PKG_MANAGER=yarn WRANGLER_VERSION=latest WRANGLER_INSTALL_ROOT="$tmp_dir/install-yarn" \
+    bash "$root_dir/scripts/install-wrangler.sh" >/dev/null 2>&1; then
+    fail 'unsupported package manager is rejected'
+  else
+    pass 'unsupported package manager is rejected'
+  fi
+
+  local fake_bin="$tmp_dir/install-silent/bin"
+  mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fake_bin/bun"
+  chmod +x "$fake_bin/bun"
+  if env PATH="$fake_bin:$PATH" PKG_MANAGER=bun WRANGLER_VERSION=latest WRANGLER_INSTALL_ROOT="$tmp_dir/install-silent/root" \
+    bash "$root_dir/scripts/install-wrangler.sh" >/dev/null 2>&1; then
+    fail 'missing Wrangler binary after install is rejected'
+  else
+    pass 'missing Wrangler binary after install is rejected'
+  fi
+}
+
 run_deploy() {
   local label=$1
   local mode=$2
@@ -169,6 +236,7 @@ run_teardown() {
 
 run_context_test
 run_version_test
+run_install_test
 
 run_deploy preview_success preview-success preview feature/login 0
 assert_args "$RUN_ARGS_FILE" $'preview\n--name\nfeature/login\n--json' 'native preview command and safe name'

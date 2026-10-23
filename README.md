@@ -36,7 +36,7 @@ A reusable GitHub Action for deploying production Workers and named Cloudflare W
 - Monorepo support with `working_directory`
 - GitHub Actions summary
 
-v2 requires Node.js 22 and Wrangler 4.135.0 or newer. The action defaults to Wrangler 4.135.0; pin a later version with `wrangler_version` after validating it in your workflows.
+v2 requires Node.js 22 and Wrangler 4.135.0 or newer. The action defaults to Wrangler 4.135.0; pin a later version with `wrangler_version` after validating it in your workflows. Wrangler is installed into a private directory under `$RUNNER_TEMP` and added to `PATH`, not into the package manager's global directory, so shared self-hosted runners with an unwritable global directory (`EACCES`) still work.
 
 ## Usage
 

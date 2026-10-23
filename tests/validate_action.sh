@@ -73,4 +73,9 @@ if grep -R -n -F -- "eval \"\$INSTALL_CMD\"" "$root_dir/action.yml"; then
   exit 1
 fi
 
+if grep -R -n -E -- '(bun|npm|pnpm) (install|add) (-g|--global)' "$root_dir/action.yml" "$root_dir/scripts"; then
+  printf 'global Wrangler install remains; it fails with EACCES on shared self-hosted runners\n' >&2
+  exit 1
+fi
+
 printf 'Action scripts and metadata pass local validation.\n'

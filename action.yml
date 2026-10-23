@@ -166,25 +166,8 @@ runs:
       env:
         PKG_MANAGER: ${{ inputs.package_manager }}
         WRANGLER_VERSION: ${{ inputs.wrangler_version }}
-      run: |
-        case "$PKG_MANAGER" in
-          bun|npm|pnpm) ;;
-          *) echo "Unsupported package_manager: $PKG_MANAGER" >&2; exit 1 ;;
-        esac
-
-        if [ "$WRANGLER_VERSION" == "latest" ]; then
-          PACKAGE="wrangler"
-        else
-          PACKAGE="wrangler@$WRANGLER_VERSION"
-        fi
-
-        if [ "$PKG_MANAGER" == "bun" ]; then
-          bun install -g "$PACKAGE"
-        elif [ "$PKG_MANAGER" == "pnpm" ]; then
-          pnpm install -g "$PACKAGE"
-        else
-          npm install -g "$PACKAGE"
-        fi
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/install-wrangler.sh"
 
     - name: Verify Wrangler version
       shell: bash
